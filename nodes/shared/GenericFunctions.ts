@@ -39,7 +39,13 @@ export async function scrapelyRequest(
 	try {
 		return await this.helpers.httpRequestWithAuthentication.call(this, 'scrapelyApi', request);
 	} catch (error) {
-		throw new NodeApiError(this.getNode(), error as JsonObject);
+		// Show the API's own reason (e.g. "Webhook URL not allowed: …") instead of a generic HTTP message.
+		const err = error as { response?: { data?: unknown; body?: unknown }; cause?: { response?: { data?: unknown } } };
+		const body = (err.response?.data ?? err.response?.body ?? err.cause?.response?.data) as
+			| { error?: { message?: string } }
+			| undefined;
+		const message = body?.error?.message;
+		throw new NodeApiError(this.getNode(), error as JsonObject, message ? { message } : {});
 	}
 }
 
@@ -96,24 +102,45 @@ export async function getDatasetItems(
 	return list.map((item) => (item && typeof item === 'object' && !Array.isArray(item) ? (item as IDataObject) : { value: item as IDataObject[keyof IDataObject] }));
 }
 
-function matches(filter: string | undefined, ...values: unknown[]): boolean {
-	if (!filter) return true;
-	const f = filter.toLowerCase();
-	return values.some((v) => typeof v === 'string' && v.toLowerCase().includes(f));
+const PAGE_SIZE = 100;
+
+/** One page of a list endpoint, searched on the server, for a resource-locator list. */
+async function searchPage(
+	this: ILoadOptionsFunctions,
+	path: string,
+	filter: string | undefined,
+	paginationToken: string | undefined,
+	toItem: (row: IDataObject) => INodeListSearchItems,
+): Promise<INodeListSearchResult> {
+	const offset = Number(paginationToken) || 0;
+	const qs: IDataObject = { limit: PAGE_SIZE, offset, desc: 1 };
+	if (filter) qs.search = filter;
+	const response = unwrap<IDataObject>(await scrapelyRequest.call(this, 'GET', path, { qs }));
+	const rows = (response?.items as IDataObject[]) ?? [];
+	const total = typeof response?.total === 'number' ? response.total : undefined;
+	const next = offset + rows.length;
+	const more = rows.length === PAGE_SIZE && (total === undefined || next < total);
+	return { results: rows.map(toItem), paginationToken: more ? String(next) : undefined };
 }
 
-export async function searchActors(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult> {
-	const response = unwrap<IDataObject>(await scrapelyRequest.call(this, 'GET', '/v2/actors', { qs: { limit: 1000, desc: 1 } }));
-	const items = ((response?.items as IDataObject[]) ?? []).filter((a) => matches(filter, a.name, a.title, a.username));
-	const results: INodeListSearchItems[] = items.map((a) => ({
+export async function searchActors(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+	paginationToken?: string,
+): Promise<INodeListSearchResult> {
+	return await searchPage.call(this, '/v2/actors', filter, paginationToken, (a) => ({
 		name: a.username ? `${String(a.title || a.name)} (${String(a.username)}/${String(a.name)})` : String(a.title || a.name),
 		value: String(a.id),
 	}));
-	return { results };
 }
 
-export async function searchTasks(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult> {
-	const response = unwrap<IDataObject>(await scrapelyRequest.call(this, 'GET', '/v2/actor-tasks', { qs: { limit: 1000, desc: 1 } }));
-	const items = ((response?.items as IDataObject[]) ?? []).filter((t) => matches(filter, t.name, t.title));
-	return { results: items.map((t) => ({ name: String(t.title || t.name), value: String(t.id) })) };
+export async function searchTasks(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+	paginationToken?: string,
+): Promise<INodeListSearchResult> {
+	return await searchPage.call(this, '/v2/actor-tasks', filter, paginationToken, (t) => ({
+		name: String(t.title || t.name),
+		value: String(t.id),
+	}));
 }
