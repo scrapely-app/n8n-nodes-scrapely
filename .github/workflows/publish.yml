@@ -1,0 +1,47 @@
+name: Publish to npm
+
+# Publishes when the version in package.json is newer than the one on npm.
+# npm provenance links each version to this repository and workflow, which
+# n8n requires for verified community nodes.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Check version
+        id: check
+        run: |
+          local_ver=$(jq -r .version package.json)
+          remote_ver=$(curl -fsS https://registry.npmjs.org/n8n-nodes-scrapely/latest | jq -r .version || true)
+          newest=$(printf '%s\n%s\n' "$local_ver" "$remote_ver" | sort -V | tail -1)
+          if [ -z "$remote_ver" ] || { [ "$local_ver" != "$remote_ver" ] && [ "$newest" = "$local_ver" ]; }; then
+            echo "publishing ${remote_ver:-unpublished} -> $local_ver"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$local_ver is already on npm, skipping"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.publish == 'true'
+        run: npm ci && npm run lint && npm run build
+
+      # RELEASE_MODE lets n8n-node's prepublishOnly check pass in CI.
+      - if: steps.check.outputs.publish == 'true'
+        run: npm publish --provenance --access public
+        env:
+          RELEASE_MODE: 'true'
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

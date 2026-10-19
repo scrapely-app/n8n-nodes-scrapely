@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-scrapely",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "n8n nodes for Scrape.ly: run Actors and tasks, read results, and trigger workflows when runs finish.",
   "license": "MIT",
   "homepage": "https://scrape.ly",
