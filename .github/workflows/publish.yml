@@ -37,7 +37,7 @@ jobs:
           fi
 
       - if: steps.check.outputs.publish == 'true'
-        run: npm ci && npm run lint && npm run build
+        run: npm install --no-audit --no-fund && npm run lint && npm run build
 
       # RELEASE_MODE lets n8n-node's prepublishOnly check pass in CI.
       - if: steps.check.outputs.publish == 'true'
