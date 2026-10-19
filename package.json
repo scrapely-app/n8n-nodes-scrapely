@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-scrapely",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "n8n nodes for Scrape.ly: run Actors and tasks, read results, and trigger workflows when runs finish.",
   "license": "MIT",
   "homepage": "https://scrape.ly",
@@ -12,8 +12,8 @@
     "scraper"
   ],
   "author": {
-    "name": "Scrape.ly",
-    "email": "support@scrape.ly"
+    "name": "Evomi",
+    "email": "hello@evomi.com"
   },
   "repository": {
     "type": "git",
